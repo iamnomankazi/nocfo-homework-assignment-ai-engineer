@@ -1,12 +1,4 @@
-Here is a **clean, simple, safe** README you can **copy-paste exactly as is** into GitHub.
-No fancy style. No AI tone. No em dashes.
-It meets all requirements.
 
----
-
-# ✅ COPY EVERYTHING BELOW INTO README.md
-
-````markdown
 # NoCFO Homework Assignment - AI Engineer
 
 This repository contains my solution for the NoCFO homework assignment. The task is to match bank transactions with their related attachments in both directions. The main functions are in `src/match.py`. The file `run.py` prints the report and was not modified.
