@@ -1,81 +1,92 @@
-# NOCFO Homework Assignment - AI Engineer
-
-> [!NOTE]
-> We recommend spending **no more than 6 hours** on this task. Focus on the essentials – a functional and clear implementation is more important than perfection.
-
-## Objective
-
-Your task is to write logic for matching bank transactions with potential attachments (receipts, invoices). In accounting, every transaction on a bank account must have an attachment as supporting evidence, so this is a real-world problem. The logic you implement must work in both directions. You will write two functions—`find_attachment` and `find_transaction`—and your goal is to fill in their implementations in `src/match.py`. Treat this repository as your starter template: build directly on top of it so that `run.py` continues to work without modifications.
+Here is a **clean, simple, safe** README you can **copy-paste exactly as is** into GitHub.
+No fancy style. No AI tone. No em dashes.
+It meets all requirements.
 
 ---
 
-## Starting point
+# ✅ COPY EVERYTHING BELOW INTO README.md
 
-You will receive a ready-made list of bank transactions and a list of attachments that have already been parsed and structured into JSON format. These JSON files can be found in the `/src/data` directory at the project root.
+````markdown
+# NoCFO Homework Assignment - AI Engineer
 
-Additionally, a file named `run.py` has been provided. This file calls the functions you are required to implement. Running this file will produce a report of the successfully matched pairs. You can run it using the following command:
+This repository contains my solution for the NoCFO homework assignment. The task is to match bank transactions with their related attachments in both directions. The main functions are in `src/match.py`. The file `run.py` prints the report and was not modified.
 
-```py
+## How to run
+
+### Requirements
+Python 3.10 or newer.
+
+### Setup
+
+```bash
+git clone https://github.com/<your-username>/nocfo-homework-assignment-ai-engineer.git
+cd nocfo-homework-assignment-ai-engineer
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1    # Windows PowerShell
+# or: source .venv/bin/activate # Linux and macOS
+````
+
+No external packages are needed because the solution uses only the Python standard library.
+
+### Run the report
+
+```bash
 python run.py
 ```
 
----
+The output shows expected matches and the matches found by the code.
 
-## What you need to implement
+## Matching logic
 
-- The matching logic lives in `src/match.py`. Implement the `find_attachment` and `find_transaction` functions there; do not modify `run.py`.
-- `find_attachment(transaction, attachments)` must return the single best candidate attachment for the provided transaction or `None` if no confident match exists.
-- `find_transaction(attachment, transactions)` must do the same in the opposite direction.
-- Use only the fixture data under `/src/data` and the helper report that `run.py` prints to guide your implementation.
+The matching logic is in `src/match.py`. The implementation is split into small helper functions for clarity.
 
----
+### 1. Reference based matching
 
-## What makes a good match?
+If a reference number exists, it is treated as the strongest signal.
 
-- A **reference number** match is always a 1:1 match. If a reference number match is found, the link should always be created.
-  - Note that there may be variations in the format of reference numbers. Leading zeros or whitespace within the reference number should be ignored during comparison.
-- **Amount**, **date**, and **counterparty** information are equally strong cues — but none of them alone are sufficient. Find a suitable combination of these signals to produce a confident match.
-  - Note that the spelling of the counterparty's name may vary in the bank statement. Also, the transaction date of an invoice payment rarely matches the due date exactly — it can vary. Sometimes invoices are paid late, or bank processing may take a few days. In other cases, people pay the invoice immediately upon receiving it instead of waiting until the due date.
+Reference numbers are normalized by:
 
-Keep in mind that the list of attachments includes not only receipts but also both purchase and sales invoices. Therefore, the counterparty may sometimes appear on the `recipient` field and other times on the `issuer` field.
-In receipt data, the merchant information can be found in the `supplier` field.
+* converting to string
+* removing the RF prefix
+* removing whitespace
+* removing leading zeros
+* comparing case insensitively
 
-The company whose bank transactions and attachments you are matching is **Example Company Oy**.
-If this entity is mentioned in an attachment, it always refers to the company itself.
+If exactly one attachment (or transaction) has the same normalized reference, it is returned. If zero or more than one matches exist, the function falls back to heuristics or returns None.
 
----
+### 2. Heuristic matching
 
-## Technical Requirements
+If neither side has a reference, the code uses three signals together:
 
-- The functionality is implemented using **Python**.
-- The `run.py` file must remain executable and must return an updated test report when run.
-- Your implementation should be deterministic: rerunning `python run.py` with the same data should yield the same matches every time.
+1. Amount
+   Absolute values are compared so invoice totals match outgoing bank amounts. A strong amount match is required.
 
----
+2. Date
+   The difference in days between the transaction date and the attachment date is used. If the gap is too large or the date cannot be parsed, the pair is rejected.
 
-## Submission
+3. Counterparty
+   Transaction uses the contact field.
+   Attachments use issuer, recipient or supplier.
+   Names are normalized by lowercasing, trimming and removing common company suffixes.
+   The name similarity is measured with `difflib.SequenceMatcher`. High similarity gives a positive score. If both sides have names but the similarity is zero, the pair is rejected.
 
-Submit your completed app by providing a link to a **public GitHub repository**. The repository must include:
+All three signals must support the same link for a match.
 
-1. **Source code**: All files necessary to run the app.
-2. **README.md file**, containing:
+### 3. Selecting the best candidate
 
-   - Instructions to run the app.
-   - A brief description of the architecture and technical decisions.
+When using heuristics, every possible candidate is scored. Only one candidate is returned if:
 
-Email the link to the repository to **people@nocfo.io**. The email subject must include "Homework assignment". Good luck with the assignment! :)
+* the score is above a threshold
+* the best score is clearly higher than the second best
 
----
+This helps avoid uncertain matches.
 
-## Evaluation Criteria
+## Notes
 
-1. Matching Accuracy: The implemented heuristics produce reasonable and explainable matches with minimal false positives.
-2. Code Clarity: The logic is easy to read, well-structured, and includes clear comments or docstrings explaining the reasoning.
-3. Edge Case Handling: The implementation behaves predictably with missing data, ambiguous cases, and noisy inputs.
-4. Reusability & Design: Functions are modular and deterministic.
-5. Documentation & Tests: The README and test cases clearly describe the approach, assumptions, and demonstrate correctness.
+* Reference numbers take priority when available
+* Amount, date and counterparty are treated as equally important when references are missing
+* The code uses only standard library modules
+* The behavior is deterministic and easy to extend
 
----
 
-> [!IMPORTANT]
-> If you have technical challenges with completing the task, you can contact Juho via email at **juho.enala@nocfo.io**.
