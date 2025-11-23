@@ -11,7 +11,7 @@ Python 3.10 or newer.
 ### Setup
 
 ```bash
-git clone https://github.com/<iamnomankazi>/nocfo-homework-assignment-ai-engineer.git
+git clone https://github.com/iamnomankazi/nocfo-homework-assignment-ai-engineer.git
 cd nocfo-homework-assignment-ai-engineer
 
 python -m venv .venv
