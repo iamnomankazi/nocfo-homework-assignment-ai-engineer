@@ -7,12 +7,12 @@ Transaction = dict[str, dict]
 
 # --------- Reference handling ----------------
 
+
 def normalize_ref(ref):
     """Normalize reference numbers for comparison.
 
-    - treat value as string
-    - ignore spaces and leading zeros
-    - handle optional RF prefix
+    Treat the value as a string, remove spaces and leading zeros,
+    and strip an optional RF prefix so different formats compare equal.
     """
     if not ref:
         return None
@@ -25,11 +25,13 @@ def normalize_ref(ref):
 
 
 def get_transaction_reference(transaction: Transaction) -> str | None:
+    """Return the normalized reference from a transaction, or None if missing."""
     raw = transaction.get("reference")
     return normalize_ref(raw)
 
 
 def get_attachment_reference(attachment: Attachment) -> str | None:
+    """Return the normalized reference from an attachment, or None if missing."""
     data = attachment.get("data") or {}
     raw = data.get("reference")
     return normalize_ref(raw)
@@ -39,15 +41,18 @@ def get_attachment_reference(attachment: Attachment) -> str | None:
 
 
 def get_transaction_amount(transaction: Transaction) -> float | None:
+    """Return the amount value from a transaction."""
     return transaction.get("amount")  # type: ignore[return-value]
 
 
 def get_attachment_amount(attachment: Attachment) -> float | None:
+    """Return the total amount from an attachment."""
     data = attachment.get("data") or {}
     return data.get("total_amount")
 
 
 def parse_date(value: str | None) -> datetime | None:
+    """Parse an ISO date string into a datetime, or return None on failure."""
     if not value:
         return None
     try:
@@ -57,10 +62,15 @@ def parse_date(value: str | None) -> datetime | None:
 
 
 def get_transaction_date(transaction: Transaction) -> datetime | None:
+    """Return the transaction date as a datetime object, or None if missing."""
     return parse_date(transaction.get("date"))  # type: ignore[return-value]
 
 
 def get_attachment_date(attachment: Attachment) -> datetime | None:
+    """Return the best date for an attachment.
+
+    Prefer invoicing_date, then receiving_date, then due_date.
+    """
     data = attachment.get("data") or {}
     # invoices have invoicing_date / due_date, receipts have receiving_date
     date_str = (
@@ -72,6 +82,10 @@ def get_attachment_date(attachment: Attachment) -> datetime | None:
 
 
 def normalize_name(name: str | None) -> str | None:
+    """Normalize a party name for comparison.
+
+    Lowercase, trim and remove common Finnish company suffixes.
+    """
     if not name:
         return None
     s = name.strip().lower()
@@ -83,11 +97,17 @@ def normalize_name(name: str | None) -> str | None:
 
 
 def get_transaction_name(transaction: Transaction) -> str | None:
+    """Return the normalized counterparty name from a transaction."""
     # in the fixture this field is called "contact"
     return normalize_name(transaction.get("contact"))  # type: ignore[return-value]
 
 
 def get_attachment_counterparty(attachment: Attachment) -> str | None:
+    """Return the normalized counterparty name from an attachment.
+
+    The function checks issuer, recipient and supplier fields and skips
+    Example Company Oy, which is the account owner.
+    """
     data = attachment.get("data") or {}
     issuer = normalize_name(data.get("issuer"))
     recipient = normalize_name(data.get("recipient"))
@@ -103,6 +123,7 @@ def get_attachment_counterparty(attachment: Attachment) -> str | None:
 
 
 def amount_score(transaction: Transaction, attachment: Attachment) -> float:
+    """Score how well the amounts match, based on absolute values."""
     tx_amount = get_transaction_amount(transaction)
     att_amount = get_attachment_amount(attachment)
 
@@ -119,6 +140,7 @@ def amount_score(transaction: Transaction, attachment: Attachment) -> float:
 
 
 def date_score(transaction: Transaction, attachment: Attachment) -> float:
+    """Score how close the transaction date is to the attachment date."""
     tx_date = get_transaction_date(transaction)
     att_date = get_attachment_date(attachment)
 
@@ -140,8 +162,8 @@ def date_score(transaction: Transaction, attachment: Attachment) -> float:
 def name_score(transaction: Transaction, attachment: Attachment) -> float:
     """Return a similarity-based name score in [0, 1].
 
-    We use a strict threshold so that a small typo
-    (like Meittiläinen vs Meikäläinen) is weaker than an exact match.
+    Uses SequenceMatcher on normalized names. A strict threshold keeps
+    small differences like typos weaker than an exact match.
     """
     tx_name = get_transaction_name(transaction)
     att_name = get_attachment_counterparty(attachment)
@@ -167,10 +189,11 @@ def name_score(transaction: Transaction, attachment: Attachment) -> float:
 def match_score(transaction: Transaction, attachment: Attachment) -> float:
     """Heuristic score for pairs without reference numbers.
 
-    Rules:
-    - amount must match strongly
-    - date must be reasonably close
-    - if both sides have a name, the name must give a positive score
+    Amount, date and name must all support the link.
+    Amount and date are hard requirements, and if both sides have names
+    the name score must also be positive.
+    This follows the idea
+    that none of these signals alone is enough for a confident match.
     """
     a = amount_score(transaction, attachment)
     d = date_score(transaction, attachment)
@@ -203,7 +226,11 @@ def find_attachment(
     transaction: Transaction,
     attachments: list[Attachment],
 ) -> Attachment | None:
-    """Find the best matching attachment for a given transaction."""
+    """Find the best matching attachment for a given transaction.
+
+    First try an exact reference match. If there is no usable reference,
+    fall back to the heuristic based on amount, date and counterparty.
+    """
     # 1) reference-based matching
     tx_ref = get_transaction_reference(transaction)
     if tx_ref is not None:
@@ -231,7 +258,6 @@ def find_attachment(
         att_ref = get_attachment_reference(attachment)
 
         if tx_ref is not None or att_ref is not None:
-            # do not guess for items that have explicit references
             continue
 
         score = match_score(transaction, attachment)
@@ -259,7 +285,10 @@ def find_transaction(
     attachment: Attachment,
     transactions: list[Transaction],
 ) -> Transaction | None:
-    """Find the best matching transaction for a given attachment."""
+    """Find the best matching transaction for a given attachment.
+
+    Uses the same rules as find_attachment, but iterates over transactions.
+    """
     # 1) reference-based matching
     att_ref = get_attachment_reference(attachment)
     if att_ref is not None:
